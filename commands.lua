@@ -1,13 +1,22 @@
--- Register the custom privilege
+-- techblox_custom/commands.lua
+local S = minetest.get_translator(minetest.get_current_modname())
+
+-----------------------------------------------------------
+-- 1. PRIVILEGES
+-----------------------------------------------------------
 minetest.register_privilege("tpx", {
     description = "Allows usage of the custom /tp command",
     give_to_singleplayer = true,
 })
 
--- 1. Morning Toggle (CPU Efficient)
+-----------------------------------------------------------
+-- 2. UTILITY COMMANDS (/morning, /tp)
+-----------------------------------------------------------
+
+-- Morning Toggle
 minetest.register_chatcommand("morning", {
     params = "[on/off]",
-    description = "Freeze time at morning (6000)",
+    description = "Freeze time at morning (6:00 AM)",
     privs = {settime = true},
     func = function(name, param)
         if param == "on" then
@@ -16,7 +25,8 @@ minetest.register_chatcommand("morning", {
             minetest.chat_send_all("*** Morning Mode Enabled: Time is frozen at 6:00 AM ***")
             return true
         elseif param == "off" then
-            minetest.settings:set("time_speed", "72") -- Default Minetest speed
+            -- Note: '72' is the standard Minetest time speed
+            minetest.settings:set("time_speed", "72") 
             minetest.chat_send_all("*** Morning Mode Disabled: Time resumed ***")
             return true
         else
@@ -25,7 +35,7 @@ minetest.register_chatcommand("morning", {
     end,
 })
 
--- 2. Teleport Command (Restricted to 'tpx' privs)
+-- Teleport Command
 minetest.register_chatcommand("tp", {
     params = "<name> | <x> <y> <z>",
     description = "Teleport to a player or coordinates",
@@ -34,7 +44,7 @@ minetest.register_chatcommand("tp", {
         local player = minetest.get_player_by_name(name)
         if not player then return false, "Error: You are not online?" end
 
-        -- Option A: TP to Player
+        -- Try TP to Player first
         local target_player = minetest.get_player_by_name(param)
         if target_player then
             local ppos = target_player:get_pos()
@@ -42,7 +52,7 @@ minetest.register_chatcommand("tp", {
             return true, "Teleported to player: " .. param
         end
 
-        -- Option B: TP to Coords (x y z)
+        -- Try TP to Coords (x y z)
         local x, y, z = param:match("^(%-?%d+%.?%d*)%s+(%-?%d+%.?%d*)%s+(%-?%d+%.?%d*)$")
         if x and y and z then
             local pos = {x = tonumber(x), y = tonumber(y), z = tonumber(z)}
@@ -53,26 +63,9 @@ minetest.register_chatcommand("tp", {
         return false, "Invalid format. Use /tp <name> or /tp <x> <y> <z>"
     end,
 })
--- techblox_custom/commands.lua
-local S = minetest.get_translator(minetest.get_current_modname())
-
--})
-
--- Monitor player count for the pending refresh
-minetest.register_globalstep(function(dtime)
-    if refresh_active then
-        local count = #minetest.get_connected_players()
-        if count == 0 then
-            minetest.request_shutdown("Scheduled Refresh", true)
-        end
-    end
-end)
-
--- techblox_custom/commands.lua
-local S = minetest.get_translator(minetest.get_current_modname())
 
 -----------------------------------------------------------
--- 1. COMMAND: /refresh
+-- 3. REFRESH LOGIC (Wait for empty server)
 -----------------------------------------------------------
 local refresh_active = false
 
@@ -85,28 +78,21 @@ minetest.register_chatcommand("refresh", {
         end
 
         refresh_active = true
-        
-        -- Sending a clean notice to all players
-        minetest.chat_send_all("*** SERVER NOTICE: A system refresh has been scheduled by an admin.")
+        minetest.chat_send_all("*** SERVER NOTICE: A system refresh has been scheduled.")
         minetest.chat_send_all("*** The server will restart automatically once it is empty.")
         
-        -- Check immediately in case the admin is the only one online
-        local players = minetest.get_connected_players()
-        if #players <= 1 then
-            minetest.log("action", "[Techblox] Admin " .. name .. " triggered immediate refresh (Server empty).")
+        -- Check immediately if admin is alone
+        if #minetest.get_connected_players() <= 1 then
+            minetest.log("action", "[Techblox] Admin " .. name .. " triggered immediate refresh.")
             minetest.request_shutdown("Server Refresh", true)
         end
-        
-        return true, S("Refresh scheduled. The server will shut down once all players leave.")
+        return true, S("Refresh scheduled. Waiting for players to leave...")
     end,
 })
 
--- Globalstep to monitor player count and trigger the shutdown
 minetest.register_globalstep(function(dtime)
     if refresh_active then
-        local count = #minetest.get_connected_players()
-        if count == 0 then
-            minetest.log("action", "[Techblox] Executing scheduled refresh.")
+        if #minetest.get_connected_players() == 0 then
             minetest.request_shutdown("Scheduled Refresh", true)
         end
     end
